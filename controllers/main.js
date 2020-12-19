@@ -17,6 +17,10 @@ class GameController {
 
     #trail = [];                                        //Snake X,Y positions will be maintained here (upto tailLength)
     #trailLength = GameController.minTrailLength;       //Snake tail will have a length of 5 initially
+    
+    //Score variables
+    #finalScore = 0;
+    #highScore = 0;
 
     //For notifying view about state changes
     #viewListener = null;
@@ -37,13 +41,14 @@ class GameController {
     static foodIntersectionTolerance = 1;
 
     #SMOOTH = false;
-    #currentState = null;
+    #currentState = GameController.States.INIT;
 
     playIcon = new Image();
     pauseIcon = new Image();
     smoothFPSIcon = new Image();
 
     static States = {
+        INIT        :   'INIT',
         RUNNING     :   'RUNNING',
         PAUSED      :   'PAUSED',
         GAME_OVER   :   'GAME_OVER'
@@ -122,62 +127,71 @@ class GameController {
         await promiseChain;
     }
 
-    redrawUI = () => {
-        let stateIcon = this.isPaused() ? this.playIcon : this.pauseIcon;
+    renderUI = () => {
+        let stateIcon = this.isRunning() ? this.pauseIcon : this.playIcon;
         this.#context.drawImage(stateIcon, GameController.iconOffsetX, GameController.iconOffsetY, GameController.iconSize, GameController.iconSize);
 
         this.#context.filter = 'opacity(' + (this.#SMOOTH ? 1 : 0.2) + ')';
         this.#context.drawImage(this.smoothFPSIcon, GameController.iconSize + GameController.iconOffsetX, GameController.iconOffsetY, GameController.iconSize, GameController.iconSize);
         this.#context.filter = 'none';
 
+        let smoothHint = 'Press (s)';
+        this.#context.font = "14px Verdana";
+        this.#context.fillStyle = '#FFFFFF';
+        this.#context.fillText(smoothHint, GameController.iconSize * 2 + GameController.iconOffsetX * 4, GameController.iconSize / 2 + 10);
+
         let scoreText = 'Score: ' + this.#trailLength;
         this.#context.font = "20px Verdana";
         this.#context.fillStyle = '#FFFFFF';
         let textMetrics = this.#context.measureText(scoreText);
         this.#context.fillText(scoreText, this.#canvas.width - textMetrics.width - 10, 25);
+        
+        let highScoreText = 'High score: ' + this.#highScore;
+        this.#context.font = "20px Verdana";
+        this.#context.fillStyle = '#FFFFFF';
+        textMetrics = this.#context.measureText(highScoreText);
+        this.#context.fillText(highScoreText, this.#canvas.width - textMetrics.width - 10, 50);
     }
 
     //Main renderer
     looper = () => {
+        const isNewVector = this.#vector.is_new;
         if (this.isRunning()) {
-            this.#snakeX += this.#vector.x;
-            this.#snakeY += this.#vector.y;
+            let vectorX = this.#vector.x;
+            let vectorY = this.#vector.y;
+
+            if (isNewVector) {
+                delete this.#vector.is_new;
+
+                if (this.#SMOOTH) {
+                    vectorX *= GameController.smoothFactor;
+                    vectorY *= GameController.smoothFactor;
+                }
+            }
+
+            this.#snakeX += vectorX;
+            this.#snakeY += vectorY;
+
+            //Ensuring grid when changing direction in 60FPS mode
+            if (isNewVector && this.#SMOOTH) {
+                this.#snakeX = Math.round(this.#snakeX);
+                this.#snakeY = Math.round(this.#snakeY);
+            }
         }
         
         this.handleWrap();
         
-        //Draw field for entire canvas
-        this.#context.fillStyle = GameController.fieldColor;
-        this.#context.fillRect(0, 0, this.#canvas.width, this.#canvas.height);
-        this.redrawUI();
+        //Order of drawing in canvas decides the layers
+        this.renderBoard();
         
+        //For rendering intial position
         if (this.#trail.length == 0) {
             this.#trail.push({ x: this.#snakeX, y: this.#snakeY });
         }
 
-        let isGameOver = false;
-        this.#context.fillStyle = GameController.snakeColor;
-        for (let i = 0; i < this.#trail.length; i++) {
-            let trailPos = this.#trail[i];
-
-            //Drawing snake and its tail. Params are for coordinates X, Y and rect size
-            //-2 is added to show separation between tail element in the grid
-            this.#context.fillRect(trailPos.x * GameController.tileSize, trailPos.y * GameController.tileSize, GameController.tileSize - 2, GameController.tileSize - 2);
-
-            const isTrailIntersecting = function() {
-                return !this.#SMOOTH ? 
-                            trailPos.x == this.#snakeX && trailPos.y == this.#snakeY :
-                            Math.abs(trailPos.x - this.#snakeX) < this.getVectorDelta() / 2 && Math.abs(trailPos.y - this.#snakeY) < this.getVectorDelta() / 2;     //Allowing inaccurate match for when smooth mode is chosen;
-            }.bind(this);
-
-            //Oops, the snake bit itself :(
-            if (isTrailIntersecting() && this.isRunning() && this.#trail.length > GameController.minTrailLength) {
-                isGameOver = true;
-            }
-        }
-
+        let isGameOver = this.renderSnake();
         if (isGameOver) {
-            this.handleGameOver();
+            this.renderGameOver();
         }
 
         //Adding current position to trail
@@ -192,13 +206,50 @@ class GameController {
             this.placeFood();
         }
 
+        this.renderFood();
+    }
+
+    renderBoard = () => {
+        //Draw field for entire canvas
+        this.#context.fillStyle = GameController.fieldColor;
+        this.#context.fillRect(0, 0, this.#canvas.width, this.#canvas.height);
+        this.renderUI();
+    }
+    
+    renderSnake = () => {
+        let isGameOver = this.isGameOver();
+        this.#context.fillStyle = GameController.snakeColor;
+        for (let i = 0; i < this.#trail.length; i++) {
+            let trailPos = this.#trail[i];
+
+            //Drawing snake and its tail. Params are for coordinates X, Y and rect size
+            //-2 is added to show separation between tail element in the grid
+            this.#context.fillRect(trailPos.x * GameController.tileSize, trailPos.y * GameController.tileSize, GameController.tileSize - 2, GameController.tileSize - 2);
+
+            //Oops, the snake bit itself :(
+            if (trailPos.x == this.#snakeX && trailPos.y == this.#snakeY && this.isRunning() && this.#trail.length > GameController.minTrailLength) {
+                this.#finalScore = this.#trailLength;
+                let isNewHighScore = ScoreManager.checkAndUpdateHighScore(this.#finalScore);
+                isGameOver = true;
+            }
+        }
+
+        return isGameOver;
+    }
+
+    renderFood = () => {
         this.#context.fillStyle = GameController.foodColor;
         //-2 on food rect as well for uniform size
         this.#context.fillRect(this.#foodX * GameController.tileSize, this.#foodY * GameController.tileSize, GameController.tileSize - 2, GameController.tileSize - 2);
     }
 
-    handleGameOver = () => {
-        let gameOverText = 'Game over!\nYour score: ' + this.#trailLength;
+    renderGameOver = () => {
+        this.renderBoard();
+        this.renderUI();
+        this.renderSnake();
+        this.renderFood();
+
+        let gameOverText = 'Game over!\nYour score: ' + this.#finalScore + '\n Press SPACE to continue';
         this.#context.font = "30px Verdana";
         this.#context.fillStyle = '#FFFFFF';
         let textMetrics = this.#context.measureText(gameOverText);
@@ -268,8 +319,9 @@ class GameController {
         this.looper();
     }
 
-    updateVector = (newVector) => {
-        this.#vector = newVector;
+    updateVector = (vector) => {
+        vector.is_new = true;
+        this.#vector = vector;
     }
 
     getVectorDelta = () => {
@@ -280,9 +332,9 @@ class GameController {
         this.#canvas = canvasElem;
         this.setUpCanvas(innerWidth, innerHeight);
         this.#context = this.#canvas.getContext('2d');
+        this.#highScore = ScoreManager.getHighScore();
 
         this.reInit();
-
         this.loadAssets();
     }
 
@@ -303,6 +355,10 @@ class GameController {
     resume = () => {
         this.#currentState = GameController.States.RUNNING;
         this.looper();
+    }
+
+    isInit = () => {
+        return this.#currentState == GameController.States.INIT;
     }
 
     isPaused = () => {

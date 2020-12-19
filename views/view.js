@@ -125,11 +125,7 @@ class GameView {
         if (keyCode >= 37 && keyCode <= 40) {
             this.#controller.updateVector(vector);
 
-            if(!this.#controller.isRunning()) {
-                if (this.#controller.isGameOver()) {
-                    this.#controller.reInit();
-                }
-
+            if(this.#controller.isPaused() || this.#controller.isInit()) {
                 this.resumeGame();
             }
 
@@ -147,7 +143,7 @@ class GameView {
         }
 
         //Prevent attempting to move in opposite direction
-        if (keyCode == GameController.oppositeKeyMapping[this.#lastKeyIn]) {
+        if (this.#controller.isRunning() && (keyCode == GameController.oppositeKeyMapping[this.#lastKeyIn] || keyCode == this.#lastKeyIn)) {
             return;
         }
 
