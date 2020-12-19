@@ -85,23 +85,23 @@ class GameView {
 
         //Update movement vectors
         switch (keyCode) {
-            case 37:
+            case 37:    //Arrow LEFT
                 vector.x = -vectorDelta;
                 break;
 
-            case 38:
+            case 38:    //Arrow UP
                 vector.y = -vectorDelta;
                 break;
 
-            case 39:
+            case 39:    //Arrow RIGHT
                 vector.x = vectorDelta;
                 break;
 
-            case 40:
+            case 40:    //Arrow DOWN
                 vector.y = vectorDelta;
                 break;
 
-            case 83:
+            case 83:    //Character S - for enabling smooth mode
                 if (!this.#SMOOTH) {
                     this.enableSmoothMode();
                 } else {
@@ -110,7 +110,7 @@ class GameView {
 
                 break;
 
-            case 32:
+            case 32:    //Space key - for pausing or restarting game
                 if (this.#controller.isPaused()) {
                     this.resumeGame();
                 } else if (this.#controller.isRunning()) {
@@ -121,6 +121,7 @@ class GameView {
                 }
         }
 
+        //Update vector if arrow keys were pressed
         if (keyCode >= 37 && keyCode <= 40) {
             this.#controller.updateVector(vector);
 
@@ -131,16 +132,16 @@ class GameView {
 
                 this.resumeGame();
             }
-        }
 
-        this.#lastKeyIn = keyCode;
+            this.#lastKeyIn = keyCode;
+        }
     }
 
     #keyTimeout = null;
     keyPushListener = (event) => {
         const keyCode = event.keyCode;
 
-        //Allow only arrow key, space key and S key (for enabling 60FPS)
+        //Allow only arrow key, space key and S key
         if ((keyCode < 37 || keyCode > 40) && keyCode != 32 && keyCode != 83) {
             return;
         }
@@ -156,6 +157,7 @@ class GameView {
         this.#keyTimeout = setTimeout(() => { this.#keyDebounce(event); }, 10);     //Debouncing key events by 10ms to avoid duplicate input in-between frames
     }
 
+    //For drawing initial frame
     initialize = () => {
         this.#controller.looper();
     }
