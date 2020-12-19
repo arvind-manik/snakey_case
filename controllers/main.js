@@ -203,13 +203,35 @@ class GameController {
         }
 
         if (this.isInit()) {
-            let gameStartText = 'Hello! Press SPACE or ARROW keys to start';
+            let gameStartText = 'Hello! Press any ARROW key to start';
             this.showAlert(gameStartText);
         }
 
         //Adding current position to trail
         if (this.isRunning()) {
             this.#trail.unshift({ x: this.#snakeX, y: this.#snakeY });
+
+            //Updating previous trail by regular vector delta for ensuring smoothness
+            if (this.#SMOOTH) {
+                const prevTrail = this.#trail[1];
+                const normalVectorDelta = this.#vectorDelta * GameController.smoothFactor;
+                let xDiff = Math.abs(prevTrail.x - this.#snakeX);
+                let yDiff = Math.abs(prevTrail.y - this.#snakeY);
+                console.log(xDiff, yDiff);
+                
+                if (xDiff > 0) {
+                    prevTrail.x += normalVectorDelta - xDiff;
+                } else if (xDiff < 0) {
+                    prevTrail.x -= normalVectorDelta - xDiff;
+                }
+                
+                if (yDiff > 0) {
+                    prevTrail.y += normalVectorDelta - yDiff;
+                } else if (yDiff < 0) {
+                    prevTrail.y -= normalVectorDelta - yDiff;
+                }
+            }
+
             this.popExcessTrail();
         }
 
