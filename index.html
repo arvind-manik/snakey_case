@@ -2,8 +2,39 @@
 <html>
 	<head>
 		<title>Snakey Case</title>
-		<script src="src/game.js"></script>
+		<script src="controllers/main.js"></script>
+		<script src="views/view.js"></script>
+		<script src="utils/_util.js"></script>
+		<link rel="stylesheet" href="styles/base.css"/>
 	</head>
 	<body>
 	</body>
+	<script>
+		window.gameController = null;
+		window.gameView = null;
+
+		window.onload = function() {
+			let canvasElem = document.createElement('canvas');
+			canvasElem.classList.add('game-canvas');
+			
+			const controller = new GameController(canvasElem, window.innerWidth, window.innerHeight);
+			document.body.appendChild(canvasElem);
+
+			window.gameController = controller;
+			const view = new GameView(window, controller);
+			document.addEventListener('keydown', view.keyPushListener);
+			view.initialize();
+
+			window.gameView = view;
+
+			//Debounced resize event
+			let resizeTimer = null;
+			window.onresize = () => {
+				clearTimeout(resizeTimer);
+				resizeTimer = setTimeout(() => {
+					controller.handleResize(window.innerWidth, window.innerHeight);
+				}, 200);    //will trigger 200ms after resize completes
+			}
+		}
+	</script>
 </html>
