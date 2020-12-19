@@ -2,36 +2,60 @@ window.gameController = undefined;
 
 window.onload = function() {
     let canvasElem = document.createElement('canvas');
-    canvasElem.style.display = 'block';
+    Util.setStyle(canvasElem, { display: 'block', overflow: 'hidden', position: 'absolute', top: 0, left: 0 });
+    
     window.gameController = new GameController(canvasElem, window.innerWidth, window.innerHeight);
     document.body.appendChild(canvasElem);
     document.addEventListener('keydown', gameController.keyPushListener);
 
+    window.gameInterval = null;
     const normalModeFPS = 15;
     runNormalMode = () => {
         window.gameInterval = window.setInterval(gameController.looper, 1000 / normalModeFPS);
     }
 
+    //By default game starts in normal mode
     runNormalMode();
+
+    window.gameAnimationFrame = null;
+    runSmoothMode = () => {
+        let frameLoop = () => {
+            if (SMOOTH) {
+                gameController.looper();
+                window.gameAnimationFrame = requestAnimationFrame(frameLoop);
+            }
+        }
+    
+        window.gameAnimationFrame = requestAnimationFrame(frameLoop);
+    }
+
+    pauseGame = () => {
+        if (!SMOOTH) {
+            clearInterval(window.gameInterval);
+        } else {
+            cancelAnimationFrame(window.gameAnimationFrame);
+        }
+    }
+    
+    resumeGame = () => {
+        if (!SMOOTH) {
+            runNormalMode();
+        } else {
+            runSmoothMode();
+        }
+    }
 
     var SMOOTH = false;
     enableSmoothMode = () => {
+        clearInterval(window.gameInterval);
         window.gameController.enableSmoothMode();
         SMOOTH = true;
         
-        clearInterval(window.gameInterval);
-
-        var frameLoop = () => {
-            if (SMOOTH) {
-                gameController.looper();
-                requestAnimationFrame(frameLoop);
-            }
-        }
-
-        requestAnimationFrame(frameLoop);
+        runSmoothMode();
     }
 
     disableSmoothMode = () => {
+        cancelAnimationFrame(window.gameAnimationFrame);
         window.gameController.disableSmoothMode();
         SMOOTH = false;
 
@@ -45,6 +69,18 @@ window.onload = function() {
         resizeTimer = setTimeout(() => {
             gameController.handleResize(window.innerWidth, window.innerHeight);
         }, 250);    //will trigger 250ms after resize completes
+    }
+}
+
+class GameView {
+
+}
+
+window.Util = {
+    setStyle: (element, styles) => {
+        for (let styleName in styles) {
+            element.style[styleName] = styles[styleName];
+        }
     }
 }
 
@@ -65,18 +101,19 @@ class GameController {
     #vector = { x: 0, y: 0 };
     #vectorDelta = 1;
 
-    #snakeTrail = [];   //Snake X,Y positions will be maintained here (upto tailLength)
-    #tailLength = GameController.minTailLength;    //Snake tail will have a length of 5 initially
+    #trail = [];                                        //Snake X,Y positions will be maintained here (upto tailLength)
+    #trailLength = GameController.minTrailLength;       //Snake tail will have a length of 5 initially
 
     //Constants
     static tileSize = 50;  //50px
-    static minTailLength = 5;
+    static minTrailLength = 5;
 
     static fieldColor = '#000000';
     static snakeColor = '#00ff00';
     static foodColor = '#ff0000';
 
     #lastKeyIn = -1;
+    #SMOOTH = false;
 
     //For preventing action on trying to move in opposite direction
     static oppositeKeyMapping = {
@@ -96,7 +133,7 @@ class GameController {
         this.#foodY = Math.floor(Math.random() * this.#boardYMax);
 
         //Avoiding placing at snake's current position
-        if (this.didEatFood()) {
+        if (this.isFoodInterSecting()) {
             this.placeFood();
         }
     }
@@ -110,14 +147,30 @@ class GameController {
         this.#boardYMax = Math.floor(innerHeight / GameController.tileSize);
     }
 
+    static smoothFactor = 5;
     //For moving snake slower to allow 60FPS animation
     enableSmoothMode = () => {
-        this.#vectorDelta = 0.1;
+        this.#SMOOTH = true;
+        this.#vectorDelta /= GameController.smoothFactor;
+        this.#vector.x /= GameController.smoothFactor;
+        this.#vector.y /= GameController.smoothFactor;
     }
 
     //Reverting to 15FPS mode
     disableSmoothMode = () => {
-        this.#vectorDelta = 1;
+        this.#SMOOTH = true;
+        this.#vectorDelta *= GameController.smoothFactor;
+        this.#vector.x *= GameController.smoothFactor;
+        this.#vector.y *= GameController.smoothFactor;
+
+        this.#snakeX = Math.round(this.#snakeX);
+        this.#snakeY = Math.round(this.#snakeY);
+
+        for (let i = 0; i < this.#trail.length; i++) {
+            let trailPos = this.#trail[i];
+            trailPos.x = Math.round(trailPos.x);
+            trailPos.y = Math.round(trailPos.y);
+        }
     }
 
     //Main renderer
@@ -132,8 +185,8 @@ class GameController {
         this.#context.fillRect(0, 0, this.#canvas.width, this.#canvas.height);
 
         this.#context.fillStyle = GameController.snakeColor;
-        for (let i = 0; i < this.#snakeTrail.length; i++) {
-            let trailPos = this.#snakeTrail[i];
+        for (let i = 0; i < this.#trail.length; i++) {
+            let trailPos = this.#trail[i];
 
             //Drawing snake and its tail. Params are for coordinates X, Y and rect size
             //-2 is added to show separation between tail element in the grid
@@ -141,20 +194,21 @@ class GameController {
 
             //Oops, the snake bit itself :(
             if (trailPos.x == this.#snakeX && trailPos.y == this.#snakeY) {
-                this.#tailLength = GameController.minTailLength;
+                this.#trailLength = GameController.minTrailLength;
             }
         }
 
-        this.#snakeTrail.push({ x: this.#snakeX, y: this.#snakeY });
+        //Adding current position to trail
+        this.#trail.push({ x: this.#snakeX, y: this.#snakeY });
 
         //Remove excess trail to be avoided for next render
-        while (this.#snakeTrail.length > this.#tailLength) {
-            this.#snakeTrail.shift();
+        while (this.#trail.length > this.#trailLength) {
+            this.#trail.shift();
         }
 
         //Snake has eaten food
-        if (this.didEatFood()) {
-            this.#tailLength++;
+        if (this.isFoodPosition(this.#snakeX, this.#snakeY, this.#SMOOTH)) {
+            this.#trailLength++;
             this.placeFood();
         }
 
@@ -163,44 +217,51 @@ class GameController {
         this.#context.fillRect(this.#foodX * GameController.tileSize, this.#foodY * GameController.tileSize, GameController.tileSize - 2, GameController.tileSize - 2);
     }
 
+    static accuracy = 1;
     //Will find if snake position is intersecting with food in grid
-    didEatFood = () => {
-        return this.#snakeX == this.#foodX && this.#snakeY == this.#foodY;
+    isFoodPosition = (x, y, inaccurateCheck) => {
+        return !inaccurateCheck ? 
+                    x == this.#foodX && y == this.#foodY :
+                    Math.abs(x - this.#foodX) < GameController.accuracy && Math.abs(y - this.#foodY) < GameController.accuracy;     //Allowing inaccurate match for when smooth mode is chosen
+    }
+
+    isFoodInterSecting = () => {
+        for (let i = 0; i < this.#trail.length; i++) {
+            let trailPos = this.#trail[i];
+            if (this.isFoodPosition(trailPos.x, trailPos.y)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     //Wrap snake if moving out of bounds
     handleWrap = () => {
-        if (this.#snakeX > this.#boardXMax - 1) {
+        let xBound = this.#boardXMax - 1;
+        let yBound = this.#boardYMax - 1;
+
+        if (this.#snakeX > xBound) {
             this.#snakeX = 0;
         } else if (this.#snakeX < 0) {
-            this.#snakeX = this.#boardXMax - 1;
+            this.#snakeX = xBound;
         }
 
-        if (this.#snakeY > this.#boardYMax - 1) {
+        if (this.#snakeY > yBound) {
             this.#snakeY = 0;
         } else if (this.#snakeY < 0) {
-            this.#snakeY = this.#boardYMax - 1;
+            this.#snakeY = yBound;
         }
     }
 
     handleResize = (innerWidth, innerHeight) => {
         this.setUpCanvas(innerWidth, innerHeight);
+        this.placeFood();
     }
 
-    keyPushListener = (event) => {
+    #keyDebounce = (event) => {
         const keyCode = event.keyCode;
 
-        //Ignore non-arrow key input
-        if (keyCode < 37 || keyCode > 40) {
-            return;
-        }
-
-        //Prevent attempting to move in opposite direction
-        if (keyCode == GameController.oppositeKeyMapping[this.#lastKeyIn]) {
-            return;
-        }
-
-        event.preventDefault();
         //Update movement vectors
         switch (keyCode) {
             case 37:
@@ -221,6 +282,26 @@ class GameController {
         }
 
         this.#lastKeyIn = keyCode;
+    }
+
+    #keyTimeout = null;
+    keyPushListener = (event) => {
+        const keyCode = event.keyCode;
+
+        //Ignore non-arrow key input
+        if (keyCode < 37 || keyCode > 40) {
+            return;
+        }
+
+        //Prevent attempting to move in opposite direction
+        if (keyCode == GameController.oppositeKeyMapping[this.#lastKeyIn]) {
+            return;
+        }
+
+        event.preventDefault();
+
+        clearTimeout(this.#keyTimeout);
+        this.#keyTimeout = setTimeout(() => { this.#keyDebounce(event); }, 20);     //Debouncing key events by 20ms to avoid duplicate input in-between frames
     }
 
     constructor (canvasElem, innerWidth, innerHeight) {
