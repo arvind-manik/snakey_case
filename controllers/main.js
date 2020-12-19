@@ -8,9 +8,10 @@ class GameController {
     #foodX;
     #foodY;
     
-    //Board size is responsive
-    #boardXMax;
-    #boardYMax;
+    //Field size is responsive
+    #fieldXMin;
+    #fieldXMax;
+    #fieldYMax;
 
     #vector = { x: 0, y: 0 };
     #vectorDelta = 1;
@@ -26,18 +27,39 @@ class GameController {
     #viewListener = null;
 
     //Constants
-    static tileSize = 50;  //50px
+    static tileSize = 0;
     static minTrailLength = 3;
 
     static fieldColor = '#000000';
     static snakeColor = '#00ff00';
     static foodColor = '#ff0000';
+    static marginColor = '#333333';
+    static fontColorWhite = '#FFFFFF';
+    static fontColorBlack = '#000000';
+    static alertModalColor = '#FFFFFF';
+    
+    static hintFont = '14px Verdana';
+    static scoreFont = '16px Verdana';
+    static alertFont = '30px Verdana';
 
+    //Field takes 80% of the available width
+    static fieldWidthFactor = 0.8;
+    static marginThickness = 5;
+
+    //Icon padding and dimenstions
     static iconOffsetX = 5;
     static iconOffsetY = 5;
     static iconSize = 40;
 
+    //Corner radius props - yet to implement
+    static snakeRadius = 10;
+    static foodRadius = 30;
+    static alertRadius = 20;
+
+    //Smooth mode speed reduction factor
     static smoothFactor = 8;
+    
+    //Tolerance in position diff while in smooth mode
     static foodIntersectionTolerance = 1;
 
     #SMOOTH = false;
@@ -63,27 +85,29 @@ class GameController {
     }
 
     resetSnake = () => {
-        this.#snakeX = Math.floor(this.#boardXMax / 2);
-        this.#snakeY = Math.floor(this.#boardYMax / 2);
+        this.#snakeX = Math.floor(this.#fieldXMax / 2);
+        this.#snakeY = Math.floor(this.#fieldYMax / 2);
     }
 
     placeFood = () => {
-        this.#foodX = Math.floor(Math.random() * this.#boardXMax);
-        this.#foodY = Math.floor(Math.random() * this.#boardYMax);
+        this.#foodX = Math.floor(Math.random() * this.#fieldXMax);
+        this.#foodY = Math.floor(Math.random() * this.#fieldYMax);
 
         //Avoiding placing at snake's current position
-        if (this.isFoodInterSecting()) {
+        while (this.isFoodInterSecting()) {
             this.placeFood();
         }
     }
 
     //Will update the canvas to set width and height and also update instance variables
-    setUpCanvas = (innerWidth, innerHeight) => {
+    setupCanvas = (innerWidth, innerHeight) => {
         this.#canvas.width = innerWidth;
         this.#canvas.height = innerHeight;
 
-        this.#boardXMax = Math.floor(innerWidth / GameController.tileSize);
-        this.#boardYMax = Math.floor(innerHeight / GameController.tileSize);
+        GameController.tileSize = innerWidth * innerHeight / Math.pow(15, 4);   //for 15px x 15px snake trail size
+
+        this.#fieldXMax = Math.floor(innerWidth / GameController.tileSize);
+        this.#fieldYMax = Math.floor(innerHeight / GameController.tileSize);
     }
 
     //For moving snake slower to allow 60FPS animation
@@ -109,48 +133,6 @@ class GameController {
             trailPos.x = Math.round(trailPos.x);
             trailPos.y = Math.round(trailPos.y);
         }
-    }
-
-    loadAssets = async () => {
-        let images = [];
-        images.push(this.playIcon);
-        images.push(this.pauseIcon);
-        images.push(this.smoothFPSIcon);
-
-        let promiseChain = Promise.all(Array.from(images).filter(img => !img.complete).map(img => new Promise(resolve => { img.onload = img.onerror = resolve; })));
-        promiseChain.then(() => { console.log('Assets loaded!'); });
-
-        this.playIcon.src = 'assets/play-100.png';
-        this.pauseIcon.src = 'assets/pause-100.png';
-        this.smoothFPSIcon.src = 'assets/60-100.png';
-
-        await promiseChain;
-    }
-
-    renderUI = () => {
-        let stateIcon = this.isRunning() ? this.pauseIcon : this.playIcon;
-        this.#context.drawImage(stateIcon, GameController.iconOffsetX, GameController.iconOffsetY, GameController.iconSize, GameController.iconSize);
-
-        this.#context.filter = 'opacity(' + (this.#SMOOTH ? 1 : 0.2) + ')';
-        this.#context.drawImage(this.smoothFPSIcon, GameController.iconSize + GameController.iconOffsetX, GameController.iconOffsetY, GameController.iconSize, GameController.iconSize);
-        this.#context.filter = 'none';
-
-        let smoothHint = 'Press (s)';
-        this.#context.font = "14px Verdana";
-        this.#context.fillStyle = '#FFFFFF';
-        this.#context.fillText(smoothHint, GameController.iconSize * 2 + GameController.iconOffsetX * 4, GameController.iconSize / 2 + 10);
-
-        let scoreText = 'Score: ' + this.#trailLength;
-        this.#context.font = "20px Verdana";
-        this.#context.fillStyle = '#FFFFFF';
-        let textMetrics = this.#context.measureText(scoreText);
-        this.#context.fillText(scoreText, this.#canvas.width - textMetrics.width - 10, 25);
-        
-        let highScoreText = 'High score: ' + this.#highScore;
-        this.#context.font = "20px Verdana";
-        this.#context.fillStyle = '#FFFFFF';
-        textMetrics = this.#context.measureText(highScoreText);
-        this.#context.fillText(highScoreText, this.#canvas.width - textMetrics.width - 10, 50);
     }
 
     //Main renderer
@@ -179,10 +161,10 @@ class GameController {
             }
         }
         
-        this.handleWrap();
-        
         //Order of drawing in canvas decides the layers
-        this.renderBoard();
+        this.renderField();
+
+        this.handleWrap();
         
         //For rendering intial position
         if (this.#trail.length == 0) {
@@ -192,6 +174,11 @@ class GameController {
         let isGameOver = this.renderSnake();
         if (isGameOver) {
             this.renderGameOver();
+        }
+
+        if (this.isInit()) {
+            let gameStartText = 'Hello! Press SPACE or ARROW keys to start';
+            this.showAlert(gameStartText);
         }
 
         //Adding current position to trail
@@ -209,14 +196,81 @@ class GameController {
         this.renderFood();
     }
 
-    renderBoard = () => {
+    renderField = () => {
+        this.#context.lineJoin = 'miter';
+        this.#context.lineWidth = 1.0;
+
         //Draw field for entire canvas
         this.#context.fillStyle = GameController.fieldColor;
         this.#context.fillRect(0, 0, this.#canvas.width, this.#canvas.height);
+
+        //Dividing the remaining 20% of area after drawing field for 
+        let marginWidth = (this.#canvas.width - (this.#canvas.width * GameController.fieldWidthFactor)) / 2;
+
+        //Drawing margins
+        this.#context.fillStyle = GameController.marginColor;
+
+        let leftMarginX = marginWidth;
+        this.#fieldXMin = Math.floor(leftMarginX / GameController.tileSize) - 1;
+        leftMarginX -= GameController.tileSize;
+        this.#context.fillRect(leftMarginX, 0, GameController.marginThickness, this.#canvas.height);
+
+        let rightMarginX = this.#canvas.width - marginWidth;
+        this.#fieldXMax = Math.ceil(rightMarginX / GameController.tileSize) + 1;
+        rightMarginX += GameController.tileSize;
+        this.#context.fillRect(rightMarginX, 0, GameController.marginThickness, this.#canvas.height);
+
         this.renderUI();
+    }
+
+    loadAssets = async () => {
+        let images = [];
+        images.push(this.playIcon);
+        images.push(this.pauseIcon);
+        images.push(this.smoothFPSIcon);
+
+        let loaded = false;
+        let promiseChain = Promise.all(Array.from(images).filter(img => !img.complete).map(img => new Promise(resolve => { img.onload = img.onerror = resolve; })));
+        promiseChain.then(() => { loaded = true; });
+
+        this.playIcon.src = 'assets/play-100.png';
+        this.pauseIcon.src = 'assets/pause-100.png';
+        this.smoothFPSIcon.src = 'assets/60-100.png';
+
+        await promiseChain;
+        return loaded;
+    }
+
+    renderUI = () => {
+        let stateIcon = this.isRunning() ? this.pauseIcon : this.playIcon;
+        this.#context.drawImage(stateIcon, GameController.iconOffsetX, GameController.iconOffsetY, GameController.iconSize, GameController.iconSize);
+
+        this.#context.filter = 'opacity(' + (this.#SMOOTH ? 1 : 0.2) + ')';
+        this.#context.drawImage(this.smoothFPSIcon, GameController.iconSize + GameController.iconOffsetX, GameController.iconOffsetY, GameController.iconSize, GameController.iconSize);
+        this.#context.filter = 'none';
+
+        let smoothHint = 'Press (s) for 60FPS';
+        this.#context.font = GameController.hintFont;
+        this.#context.fillStyle = GameController.fontColorWhite;
+        this.#context.fillText(smoothHint, GameController.iconOffsetX, GameController.iconSize * 2 + GameController.iconOffsetX * 2);
+
+        let scoreText = 'Score: ' + this.#trailLength;
+        this.#context.font = GameController.scoreFont;
+        this.#context.fillStyle = GameController.fontColorWhite;
+        let textMetrics = this.#context.measureText(scoreText);
+        this.#context.fillText(scoreText, this.#canvas.width - textMetrics.width - 10, 25);
+        
+        let highScoreText = 'High score: ' + this.#highScore;
+        this.#context.font = GameController.scoreFont;
+        this.#context.fillStyle = GameController.fontColorWhite;
+        textMetrics = this.#context.measureText(highScoreText);
+        this.#context.fillText(highScoreText, this.#canvas.width - textMetrics.width - 10, 50);
     }
     
     renderSnake = () => {
+        this.#context.lineJoin = 'round';
+        this.#context.lineWidth = GameController.snakeRadius;
+
         let isGameOver = this.isGameOver();
         this.#context.fillStyle = GameController.snakeColor;
         for (let i = 0; i < this.#trail.length; i++) {
@@ -238,22 +292,23 @@ class GameController {
     }
 
     renderFood = () => {
+        this.#context.lineJoin = 'round';
+        this.#context.lineWidth = GameController.foodRadius;
+
         this.#context.fillStyle = GameController.foodColor;
         //-2 on food rect as well for uniform size
         this.#context.fillRect(this.#foodX * GameController.tileSize, this.#foodY * GameController.tileSize, GameController.tileSize - 2, GameController.tileSize - 2);
     }
 
     renderGameOver = () => {
-        this.renderBoard();
+        //Redraw once before showing game over
+        this.renderField();
         this.renderUI();
         this.renderSnake();
         this.renderFood();
 
         let gameOverText = 'Game over!\nYour score: ' + this.#finalScore + '\n Press SPACE to continue';
-        this.#context.font = "30px Verdana";
-        this.#context.fillStyle = '#FFFFFF';
-        let textMetrics = this.#context.measureText(gameOverText);
-        this.#context.fillText(gameOverText, this.#canvas.width / 2 - textMetrics.width / 2, this.#canvas.height / 2);
+        this.showAlert(gameOverText);
 
         this.#trailLength = GameController.minTrailLength;
         this.#currentState = GameController.States.GAME_OVER;
@@ -263,6 +318,28 @@ class GameController {
         }
 
         this.popExcessTrail();
+    }
+
+    showAlert = (text) => {
+        //for alert BG
+        let textMetrics = this.#context.measureText(text);
+        let alertTextX = this.#canvas.width / 2 - textMetrics.width;
+        let alertTextY = this.#canvas.height / 2;
+        
+        let cornerRadius = GameController.alertRadius;
+        this.#context.lineJoin = 'round';
+        this.#context.lineWidth = cornerRadius;
+        
+        // let alertModalPadding = 10;
+        // this.#context.fillStyle = GameController.alertModalColor;
+        // //Change origin and dimensions to match true size (a stroke makes the shape a bit larger)
+        // this.#context.strokeRect(alertTextX - (cornerRadius / 2) - alertModalPadding, alertTextY - (cornerRadius / 2) - alertModalPadding, textMetrics.width + alertModalPadding, parseInt(GameController.alertFont) + alertModalPadding);
+        // this.#context.fillRect(alertTextX + (cornerRadius / 2), alertTextY + (cornerRadius / 2), textMetrics.width - cornerRadius, parseInt(GameController.alertFont) - cornerRadius);
+
+        //Alert content
+        this.#context.font = GameController.alertFont;
+        this.#context.fillStyle = GameController.fontColorWhite;
+        this.#context.fillText(text, alertTextX, alertTextY);
     }
 
     popExcessTrail = () => {
@@ -297,12 +374,12 @@ class GameController {
 
     //Wrap snake if moving out of bounds
     handleWrap = () => {
-        let xBound = this.#boardXMax - 1;
-        let yBound = this.#boardYMax - 1;
+        let xBound = this.#fieldXMax - 1;
+        let yBound = this.#fieldYMax - 1;
 
         if (this.#snakeX > xBound) {
-            this.#snakeX = 0;
-        } else if (this.#snakeX < 0) {
+            this.#snakeX = this.#fieldXMin;
+        } else if (this.#snakeX < this.#fieldXMin) {
             this.#snakeX = xBound;
         }
 
@@ -314,7 +391,7 @@ class GameController {
     }
 
     handleResize = (innerWidth, innerHeight) => {
-        this.setUpCanvas(innerWidth, innerHeight);
+        this.setupCanvas(innerWidth, innerHeight);
         this.placeFood();
         this.looper();
     }
@@ -330,12 +407,13 @@ class GameController {
 
     constructor (canvasElem, innerWidth, innerHeight) {
         this.#canvas = canvasElem;
-        this.setUpCanvas(innerWidth, innerHeight);
+        this.setupCanvas(innerWidth, innerHeight);
         this.#context = this.#canvas.getContext('2d');
         this.#highScore = ScoreManager.getHighScore();
 
         this.reInit();
-        this.loadAssets();
+        let loaded = this.loadAssets();
+        console.log('Loaded: ' + loaded);
     }
 
     subscribeToEvents= (listener) => {
