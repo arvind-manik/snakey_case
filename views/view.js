@@ -37,13 +37,13 @@ class GameView {
     }
     
     resumeGame = () => {
+        this.#controller.resume();
+        
         if (!this.#SMOOTH) {
             this.runNormalMode();
         } else {
             this.runSmoothMode();
         }
-
-        this.#controller.resume();
     }
 
     #SMOOTH = false;
@@ -121,14 +121,16 @@ class GameView {
                 }
         }
 
-        this.#controller.updateVector(vector);
+        if (keyCode >= 37 && keyCode <= 40) {
+            this.#controller.updateVector(vector);
 
-        if (keyCode >= 37 && keyCode <= 40 && !this.#controller.isRunning()) {
-            if (this.#controller.isGameOver()) {
-                this.#controller.reInit();
+            if(!this.#controller.isRunning()) {
+                if (this.#controller.isGameOver()) {
+                    this.#controller.reInit();
+                }
+
+                this.resumeGame();
             }
-
-            this.resumeGame();
         }
 
         this.#lastKeyIn = keyCode;
@@ -151,7 +153,7 @@ class GameView {
         event.preventDefault();
 
         clearTimeout(this.#keyTimeout);
-        this.#keyTimeout = setTimeout(() => { this.#keyDebounce(event); }, 20);     //Debouncing key events by 20ms to avoid duplicate input in-between frames
+        this.#keyTimeout = setTimeout(() => { this.#keyDebounce(event); }, 10);     //Debouncing key events by 10ms to avoid duplicate input in-between frames
     }
 
     initialize = () => {
