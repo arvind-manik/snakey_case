@@ -56,6 +56,9 @@ class GameController {
     static foodRadius = 30;
     static alertRadius = 20;
 
+    //Margin width in px
+    static marginWidth = 0;
+
     //Smooth mode speed reduction factor
     static smoothFactor = 8;
     
@@ -90,7 +93,7 @@ class GameController {
     }
 
     placeFood = () => {
-        this.#foodX = Math.floor(Math.random() * this.#fieldXMax);
+        this.#foodX = Math.max(Math.floor(Math.random() * this.#fieldXMax), this.#fieldXMin);
         this.#foodY = Math.floor(Math.random() * this.#fieldYMax);
 
         //Avoiding placing at snake's current position
@@ -105,9 +108,32 @@ class GameController {
         this.#canvas.height = innerHeight;
 
         GameController.tileSize = innerWidth * innerHeight / Math.pow(15, 4);   //for 15px x 15px snake trail size
+        
+        //Dividing the remaining 20% of area after drawing field
+        GameController.marginWidth = Math.round((this.#canvas.width - (this.#canvas.width * GameController.fieldWidthFactor)) / 2);
 
         this.#fieldXMax = Math.floor(innerWidth / GameController.tileSize);
         this.#fieldYMax = Math.floor(innerHeight / GameController.tileSize);
+
+        let leftMarginX = this.getLeftMargin();
+        this.#fieldXMin = Math.round(leftMarginX / GameController.tileSize);
+
+        let rightMarginX = this.getRightMargin();
+        this.#fieldXMax = Math.round(rightMarginX / GameController.tileSize);
+    }
+
+    getLeftMargin = () => {
+        let leftMarginX = GameController.marginWidth;
+        leftMarginX = Math.floor(leftMarginX - (leftMarginX % GameController.tileSize));
+
+        return leftMarginX;
+    }
+
+    getRightMargin = () => {
+        let rightMarginX = this.#canvas.width - GameController.marginWidth;
+        rightMarginX = Math.ceil(rightMarginX - (rightMarginX % GameController.tileSize));
+
+        return rightMarginX;
     }
 
     //For moving snake slower to allow 60FPS animation
@@ -204,21 +230,11 @@ class GameController {
         this.#context.fillStyle = GameController.fieldColor;
         this.#context.fillRect(0, 0, this.#canvas.width, this.#canvas.height);
 
-        //Dividing the remaining 20% of area after drawing field for 
-        let marginWidth = (this.#canvas.width - (this.#canvas.width * GameController.fieldWidthFactor)) / 2;
-
         //Drawing margins
         this.#context.fillStyle = GameController.marginColor;
 
-        let leftMarginX = marginWidth;
-        this.#fieldXMin = Math.floor(leftMarginX / GameController.tileSize) - 1;
-        leftMarginX -= GameController.tileSize;
-        this.#context.fillRect(leftMarginX, 0, GameController.marginThickness, this.#canvas.height);
-
-        let rightMarginX = this.#canvas.width - marginWidth;
-        this.#fieldXMax = Math.ceil(rightMarginX / GameController.tileSize) + 1;
-        rightMarginX += GameController.tileSize;
-        this.#context.fillRect(rightMarginX, 0, GameController.marginThickness, this.#canvas.height);
+        this.#context.fillRect(this.getLeftMargin(), 0, GameController.marginThickness, this.#canvas.height);
+        this.#context.fillRect(this.getRightMargin(), 0, GameController.marginThickness, this.#canvas.height);
 
         this.renderUI();
     }
