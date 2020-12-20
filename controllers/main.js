@@ -14,6 +14,7 @@ class GameController {
     #fieldYMax;
 
     #vector = { x: 0, y: 0 };
+    #previousVector = this.#vector;
     #vectorDelta = 1;
 
     #trail = [];                                        //Snake X,Y positions will be maintained here (upto tailLength)
@@ -212,25 +213,36 @@ class GameController {
             this.#trail.unshift({ x: this.#snakeX, y: this.#snakeY });
 
             //Updating previous trail by regular vector delta for ensuring smoothness
-            if (this.#SMOOTH) {
-                const prevTrail = this.#trail[1];
-                const normalVectorDelta = this.#vectorDelta * GameController.smoothFactor;
-                let xDiff = Math.abs(prevTrail.x - this.#snakeX);
-                let yDiff = Math.abs(prevTrail.y - this.#snakeY);
-                console.log(xDiff, yDiff);
-                
-                if (xDiff > 0) {
-                    prevTrail.x += normalVectorDelta - xDiff;
-                } else if (xDiff < 0) {
-                    prevTrail.x -= normalVectorDelta - xDiff;
-                }
-                
-                if (yDiff > 0) {
-                    prevTrail.y += normalVectorDelta - yDiff;
-                } else if (yDiff < 0) {
-                    prevTrail.y -= normalVectorDelta - yDiff;
-                }
-            }
+            // if (this.#SMOOTH) {
+            //     if (!isNewVector) {
+            //         for (let i = 0; i < this.#trail.length; i++) {
+            //             const prevTrail = this.#trail[i];
+            //             const shiftDelta = this.#vectorDelta * GameController.smoothFactor - this.#vectorDelta;
+            //             let xDiff = prevTrail.x - this.#snakeX;
+            //             let yDiff = prevTrail.y - this.#snakeY;
+
+            //             //Ignoring non-adjacent trail
+            //             if (Math.abs(xDiff) > 0 && Math.abs(yDiff) > 0) {
+            //                 console.log(shiftDelta, xDiff, yDiff);
+            //                 continue;
+            //             }
+    
+            //             if (xDiff > 0) {
+            //                 prevTrail.x += shiftDelta;
+            //             } else if (xDiff < 0) {
+            //                 prevTrail.x -= shiftDelta;
+            //             }
+    
+            //             if (yDiff > 0) {
+            //                 prevTrail.y += shiftDelta;
+            //             } else if (yDiff < 0) {
+            //                 prevTrail.y -= shiftDelta;   
+            //             }
+            //         }
+            //     } else {
+
+            //     }
+            // }
 
             this.popExcessTrail();
         }
@@ -292,7 +304,7 @@ class GameController {
         this.#context.fillStyle = GameController.fontColorWhite;
         this.#context.fillText(smoothHint, GameController.iconOffsetX, GameController.iconSize * 2 + GameController.iconOffsetX * 2);
 
-        let scoreText = 'Score: ' + this.#trailLength;
+        let scoreText = 'Score: ' + (this.isGameOver() ? this.#finalScore : this.#trailLength);
         this.#context.font = GameController.scoreFont;
         this.#context.fillStyle = GameController.fontColorWhite;
         let textMetrics = this.#context.measureText(scoreText);
@@ -436,6 +448,7 @@ class GameController {
 
     updateVector = (vector) => {
         vector.is_new = true;
+        this.#previousVector = this.#vector;
         this.#vector = vector;
     }
 
